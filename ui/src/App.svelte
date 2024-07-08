@@ -25,7 +25,7 @@
   })
 </script>
 
-<Banner challengeNumber={2} challengeName="Links & Collections">
+<Banner challengeNumber={3} challengeName="Testing and Validation">
   <div style="max-width: 600px; margin: 0 auto; height: 100%;">
     {#if loading}
       <div
