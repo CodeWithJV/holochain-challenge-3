@@ -10,6 +10,10 @@ pub struct Comment {
     pub author: AgentPubKey,
 }
 
+fn is_valid_comment_length(content: &str) -> bool {
+    content.chars().count() < 15
+}
+
 pub fn validate_create_comment(
     _action: EntryCreationAction,
     comment: Comment
@@ -20,54 +24,35 @@ pub fn validate_create_comment(
         include_cached_entries: true,
     })?;
 
-    let entry_type = UnitEntryTypes::Comment.try_into()?;
+    let comment_entry_type = UnitEntryTypes::Comment.try_into()?;
 
     const TIME_DIFFERENCE: i64 = 1000 * 60 * 60;
     let mut comment_count = 0;
     for activity in agent_activity {
         if
             activity.action.action().action_type() == ActionType::Create &&
-            activity.action.action().entry_type().unwrap().clone() == entry_type
+            activity.action.action().entry_type().unwrap().clone() == comment_entry_type
         {
             if
-                _action.timestamp().as_millis() - activity.action.action().timestamp().as_millis() >
+                _action.timestamp().as_millis() - activity.action.action().timestamp().as_millis() <=
                 TIME_DIFFERENCE
             {
-                break;
-            } else {
                 comment_count += 1;
             }
-        } else {
-            continue;
         }
     }
-
-    // The source chain won't contain the comment currently being created
-    // So our total number of comments will be source chain total + 1.
 
     if comment_count >= 3 {
         Ok(ValidateCallbackResult::Invalid("Validation Error: Comment count is >= 4".to_string()))
     } else {
-        match comment.content.chars().count() < 15 {
+        match is_valid_comment_length(&comment.content) {
             true => {
-                let record = must_get_valid_record(comment.post_hash.clone())?;
-                let _post: crate::Post = record
-                    .entry()
-                    .to_app_option()
-                    .map_err(|e| wasm_error!(e))?
-                    .ok_or(
-                        wasm_error!(
-                            WasmErrorInner::Guest(
-                                String::from("Dependant action must be accompanied by an entry")
-                            )
-                        )
-                    )?;
                 Ok(ValidateCallbackResult::Valid)
             }
             false =>
                 Ok(
                     ValidateCallbackResult::Invalid(
-                        "Validation Error: Comment is >= 15 charactors!".to_string()
+                        "Validation Error: Comment is >= 15 characters!".to_string()
                     )
                 ),
         }
@@ -80,18 +65,25 @@ pub fn validate_update_comment(
     _original_action: EntryCreationAction,
     _original_comment: Comment
 ) -> ExternResult<ValidateCallbackResult> {
-    let _record = must_get_valid_record(_comment.post_hash.clone())?;
     let author = _original_action.author().clone();
 
-    match author == _comment.author && author == _action.author {
-        true => Ok(ValidateCallbackResult::Valid),
-        false =>
-            Ok(
-                ValidateCallbackResult::Invalid(
-                    "Comment can only be edited by the original author".to_string()
-                )
-            ),
+    if author != _comment.author || author != _action.author {
+        return Ok(
+            ValidateCallbackResult::Invalid(
+                "Comment can only be edited by the original author".to_string()
+            )
+        );
     }
+
+    if !is_valid_comment_length(&_comment.content) {
+        return Ok(
+            ValidateCallbackResult::Invalid(
+                "Validation Error: Updated comment is >= 15 characters!".to_string()
+            )
+        );
+    }
+
+    Ok(ValidateCallbackResult::Valid)
 }
 pub fn validate_delete_comment(
     _action: Delete,

@@ -1,6 +1,6 @@
-import { assert, test } from 'vitest'
+import { assert, test, expect } from 'vitest'
 
-import { runScenario, dhtSync } from '@holochain/tryorama'
+import { pause, runScenario, dhtSync } from '@holochain/tryorama'
 import { Record, Link } from '@holochain/client'
 import { decode } from '@msgpack/msgpack'
 
@@ -261,21 +261,15 @@ test('create comment >= max length', async () => {
     assert.ok(record)
 
     // Create a new post for the comment with a content of >= 15 characters
-    // Alice creates a Comment
-    // If validation fails, createComment will throw an error
-    let fail = false
-    try {
+    // Alice attempts to create a Comment
+    // Expect createComment to throw an error due to validation failure
+    await expect(async () => {
       await createComment(alice.cells[0], {
         content: 'Very very long comment',
         post_hash: (await createPost(alice.cells[0])).signed_action.hashed.hash,
         author: alice.cells[0].cell_id[1],
       })
-      fail = true
-    } catch (err) {
-      // expected
-    }
-
-    if (fail === true) assert.fail('expected createComment to throw an error')
+    }).rejects.toThrow('Source chain error')
   })
 })
 
@@ -347,31 +341,23 @@ test('agent can only update their comments', async () => {
     await dhtSync([alice, bob], alice.cells[0].cell_id[0])
 
     // Alice tries to update Bobs comment
-    let fail = false
-    try {
-      await alice.cells[0].callZome({
-        zome_name: 'blog',
-        fn_name: 'update_comment',
-        payload: {
-          previous_comment_hash: bobComment.signed_action.hashed.hash,
-          updated_comment: {
-            content: 'ipsum Lorem',
-            post_hash: post.signed_action.hashed.hash,
-            // Alice is pretending to be Bob
-            author: alice.cells[0].cell_id[1],
-          },
+    await expect(alice.cells[0].callZome({
+      zome_name: 'blog',
+      fn_name: 'update_comment',
+      payload: {
+        previous_comment_hash: bobComment.signed_action.hashed.hash,
+        updated_comment: {
+          content: 'ipsum Lorem',
+          post_hash: post.signed_action.hashed.hash,
+          // Alice is pretending to be Bob
+          author: alice.cells[0].cell_id[1],
         },
-      })
-      fail = true
-    } catch (error) {
-      // Expected
-    }
-
-    if (fail === true) assert.fail('expected update_comment to throw an error')
+      },
+    })).rejects.toThrow('Source chain error')
   })
 })
 
-test('throw an error if > 3 comments are created in 24 hours', async () => {
+test('allow 3 comments in 1 hour, but 4th comment after 1 hour', async () => {
   await runScenario(async (scenario) => {
     // Construct proper paths for your app.
     // This assumes app bundle created by the `hc app pack` command.
@@ -391,26 +377,23 @@ test('throw an error if > 3 comments are created in 24 hours', async () => {
     // conductor of the scenario.
     await scenario.shareAllAgents()
 
-    // Alice creates a Comment
+    //NOTE this doesn't accurately test the time check in the validation code as tryorama doesn't enable easy time manipulation.
+    //You can change the time values in the validation code and use the pause function from tryorama to ensure your logic is correct
+
+    // Alice creates 3 comments within 1 hour
     const recordOne: Record = await createComment(alice.cells[0])
     assert.ok(recordOne)
 
-    // Alice creates another Comment
     const recordTwo: Record = await createComment(alice.cells[0])
     assert.ok(recordTwo)
 
-    // Alice creates another Comment
     const recordThree: Record = await createComment(alice.cells[0])
     assert.ok(recordThree)
 
-    // Alice creates another Comment and it should fail
-    let fail = false
-    try {
-      const comment = await createComment(alice.cells[0])
-      fail = true
-    } catch (error) {
-      // Expected
-    }
-    if (fail === true) assert.fail('expected createComment to fail')
+    // temporarily change your TIME_DIFFERENCE variable to 5000 in the validation code and uncomment this line to ensure your logic is correct
+    //await pause(5000)
+
+    // Alice creates a 4th comment, it should fail
+    await expect(createComment(alice.cells[0])).rejects.toThrow('Source chain error')   
   })
 })
