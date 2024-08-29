@@ -22,19 +22,18 @@ As you continue developing your app, you can also continue testing the code on o
 
 ## Setup
 
-#### 1. Fork this repo and clone it onto your local machine
-
-#### 2. cd into `c-3` directory and run `nix develop`.
-
-#### 3. Run `npm i` to install package dependencies
-
-#### 4. If you didn't complete the last challenge, run `npm start` and have a play around with the current app to understand its components
+1. Fork this repo and clone it onto your local machine
+2. cd into `holochain-challenge-3` directory and run `nix develop`.
+3. Run `npm i` to install package dependencies
+4. If you didn't complete the last challenge, run `npm start` and have a play around with the current app to understand its components
 
 ## Navigating Vitest and Tryorama
 
 Vitest is a popular Javascript Framework for testing. It provides a simple setup for creating and running test scenarios, for all sorts of applications.
 
 #### 1. Inside your terminal, run `npm test`
+
+Make sure you run `nix develop` first to load your environment.
 
 This command will execute every file ending in `.test.ts` within the `tests/src` directory (or any of its subdirectories).
 
@@ -123,11 +122,13 @@ test('create Comment', async () => {
 
 #### 3. Create and run a test for checking if Agents can read/retrieve comments on the DHT
 
+TIP: use `test.only(...` to run just the test you are working on.
+
 This test is a bit more complex. There will be multiple `assert` functions for testing each of these functions:
 
 - The creation of a comment (To read comments from the DHT, we also need to create them inside the same scenario)
 - Retrieval of a test by its action hash
-- Retreval of comments by there corresponding post
+- Retreval of comments by their corresponding post
 
 <details>
 <summary>
@@ -141,6 +142,8 @@ Hint #1 - Breakdown of each step
 - Create another `assert()` for checking if the retrieved comments contains the one we created
 
 </details>
+
+Have a look in the [sample solution branch](tree/sample-solution) if you need more help.
 
 #### 4. Create a test for checking if Agents can update comments on the DHT
 
@@ -162,7 +165,7 @@ The assertions in this test should include
 
 Now you have a better idea of testing with Holochain, we are going to use TDD to write some validation rules.
 
-#### 1. Write a test that checks to see that only comments under 15 charactors are being validated.
+#### 1. Write a test that checks to see that only comments under 15 charactors will be saved
 
 The assertions of this test should include:
 
@@ -177,7 +180,7 @@ The file `comment.test.ts` might be getting a bit large, so feel free to create 
 
 The file contains many functions for implementing validation rules, however you will notice that in most of the functions, there isn't alot going on.
 
-#### 3. Implement a validation rule to make sure that the content of the comment attempting to be created is < 15 charactors long
+#### 3. Implement a validation rule to make sure that the content of the comment attempting to be created or updated is < 15 charactors long
 
 Validation rules may seem like they are complicated, but under the hood, they are simple logical checks.
 
@@ -192,35 +195,29 @@ Hint
 Modify your validation function to look like this
 
 ```rust
+fn is_valid_comment_length(content: &str) -> bool {
+    content.chars().count() < 15
+}
+
 pub fn validate_create_comment(
     _action: EntryCreationAction,
     comment: Comment
 ) -> ExternResult<ValidateCallbackResult> {
-    match comment.content.chars().count() < 15 {
+    match is_valid_comment_length(&comment.content) {
         true => {
-            let record = must_get_valid_record(comment.post_hash.clone())?;
-            let _post: crate::Post = record
-                .entry()
-                .to_app_option()
-                .map_err(|e| wasm_error!(e))?
-                .ok_or(
-                    wasm_error!(
-                        WasmErrorInner::Guest(
-                            String::from("Dependant action must be accompanied by an entry")
-                        )
-                    )
-                )?;
             Ok(ValidateCallbackResult::Valid)
         }
         false =>
             Ok(
                 ValidateCallbackResult::Invalid(
-                    "Validation Error: Comment is >= 15 charactors!".to_string()
+                    "Validation Error: Comment is >= 15 characters!".to_string()
                 )
             ),
     }
 }
 ```
+
+Don't forget to modify your validate_update_comment function as well!
 
 </details>
 
@@ -232,10 +229,10 @@ pub fn validate_create_comment(
 
 The assertions of this test should include:
 
-- A check if an agent can update there own comment
+- A check if an agent can update their own comment
 - A check if an agent cannot update another agents comment
 
-#### 2. Create a validation rule for only allowing agents to update there own comments
+#### 2. Create a validation rule for only allowing agents to update their own comments
 
 <details>
 <summary>
@@ -254,15 +251,23 @@ pub fn validate_update_comment(
     let _record = must_get_valid_record(_comment.post_hash.clone())?;
     let author = _original_action.author().clone();
 
-    match author == _comment.author && author == _action.author {
-        true => Ok(ValidateCallbackResult::Valid),
-        false =>
-            Ok(
-                ValidateCallbackResult::Invalid(
-                    "Comment can only be edited by the original author".to_string()
-                )
-            ),
+    if author != _comment.author || author != _action.author {
+        return Ok(
+            ValidateCallbackResult::Invalid(
+                "Comment can only be edited by the original author".to_string()
+            )
+        );
     }
+
+    if !is_valid_comment_length(&_comment.content) {
+        return Ok(
+            ValidateCallbackResult::Invalid(
+                "Validation Error: Updated comment is >= 15 characters!".to_string()
+            )
+        );
+    }
+    
+    Ok(ValidateCallbackResult::Valid)
 }
 ```
 
@@ -277,12 +282,41 @@ The assertions of this test should include:
 - A check if an agent can create a comment
 - A check if an agent cannot create more than three comments during the test
 
-#### 2. Create a validation rule for only allowing agents to update there own comments
+#### 2. Create a validation rule for only allowing agents to update their own comments
 
-You will need to use the `must_get_agent_activity` function to deterministically retrieve information about previous actions made on the agents source chain.
+You will need to use the `must_get_agent_activity` function to deterministically retrieve information about previous actions made on the agents source chain. Here's a snippet to help you get started:
+
+<details>
+<summary>
+Hint
+</summary>
+
+```rust
+let agent_activity = must_get_agent_activity(_action.author().clone(), ChainFilter {
+    chain_top: _action.prev_action().clone(),
+    filters: ChainFilters::ToGenesis,
+    include_cached_entries: true,
+})?;
+
+let comment_entry_type = UnitEntryTypes::Comment.try_into()?;
+
+const TIME_DIFFERENCE: i64 = 1000 * 60 * 60 * 24; // 24 hours in milliseconds
+let mut comment_count = 0;
+for activity in agent_activity {
+    if activity.action.action().action_type() == ActionType::Create &&
+       activity.action.action().entry_type().unwrap().clone() == comment_entry_type
+    {
+        if _action.timestamp().as_millis() - activity.action.action().timestamp().as_millis() <= TIME_DIFFERENCE {
+            comment_count += 1;
+        }
+    }
+}
+```
+
+</details>
 
 This validation logic is a bit more complex. Give it your best shot, but if you are struggling, refer to the challenge solutions for help.
 
-And thats the end of it! There are many more validation rules we could create. (Eg: Can't update comments with a length of more than 15 charaters)
+And that's the end of it! There are many more validation rules we could create. (E.g., Can't update comments with a length of more than 15 characters)
 
-Feel free to implement anymore!
+Feel free to implement more!
