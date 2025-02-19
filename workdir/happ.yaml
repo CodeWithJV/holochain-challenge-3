@@ -1,7 +1,6 @@
----
-manifest_version: "1"
-name: c-2
-description: ~
+manifest_version: '1'
+name: testing-and-validation
+description: null
 roles:
   - name: blog
     provisioning:
@@ -16,3 +15,4 @@ roles:
         quantum_time: ~
       installed_hash: ~
       clone_limit: 0
+allow_deferred_memproofs: false

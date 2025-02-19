@@ -16,7 +16,7 @@ What is TDD?
 </summary>
 Test-Driven Development (TDD) is a coding approach where you write tests for your features before writing the actual code. It works in short cycles: you start by writing a test for a small part of the feature, then write the code to make the test pass.
 
-As you continue developing your app, you can also continue testing the code on old tests you wrote, to make sure that you haven't broken something along the way.
+As you continue developing your app, you can also continue testing the code in the previous tests you wrote, to make sure that you haven't broken something along the way.
 
 </details>
 
@@ -24,7 +24,7 @@ As you continue developing your app, you can also continue testing the code on o
 
 #### 1. Fork this repo and clone it onto your local machine
 
-#### 2. cd into `c-3` directory and run `nix develop`.
+#### 2. cd into `holochain-challenge-3` directory and run `nix develop`.
 
 #### 3. Run `npm i` to install package dependencies
 
@@ -36,13 +36,16 @@ Vitest is a popular Javascript Framework for testing. It provides a simple setup
 
 #### 1. Inside your terminal, run `npm test`
 
-This command will execute every file ending in `.test.ts` within the `tests/src` directory (or any of its subdirectories).
+This command will execute every file ending in `.test.ts` within the `tests/src` directory (or any of its subdirectories). 
 
-To run a specific test or group of tests, you can specify the file name, or folder/folder path containing it
+To run a specific test or group of tests, you can specify the file name, or folder path containing it
 
-Eg: `npm test all-posts`, `npm test blog/practice`
+Eg: `npm test barebones` will run a simple test to check vitest is installed ok - it should be green
 
 #### 2. Run a specific file of your choosing
+
+Tip: if you want to filter on file name you can run
+`npm test -- -- -t delete` which will only run tests which have the "delete" in the description.
 
 #### 3. Navigate to `tests/src/blog/practice/barebones.test.ts`
 
@@ -54,7 +57,7 @@ There are many Vitest methods for creating assertions that you will see througho
 
 #### 4. Uncomment the second assert and run the barebones test
 
-On your terminal, you will notice that see a very helpful message detailing that our test failed
+On your terminal, you will see a helpful message detailing that our test failed
 
 #### 5. Re-comment the failing assert inside of the barebones test, and navigate to `all-posts.test.ts` and have a read through the file
 
@@ -95,8 +98,7 @@ Hint
 test('create Comment', async () => {
   await runScenario(async (scenario) => {
     // Construct proper paths for your app.
-    // This assumes app bundle created by the `hc app pack` command.
-    const testAppPath = process.cwd() + '/../workdir/c-2.happ'
+    const testAppPath = process.cwd() + '/../workdir/testing-and-validation.happ'
 
     // Set up the app to be installed
     const appSource = { appBundleSource: { path: testAppPath } }
@@ -126,21 +128,57 @@ test('create Comment', async () => {
 This test is a bit more complex. There will be multiple `assert` functions for testing each of these functions:
 
 - The creation of a comment (To read comments from the DHT, we also need to create them inside the same scenario)
-- Retrieval of a test by its action hash
+- Retrieval of a post by its action hash
 - Retreval of comments by there corresponding post
 
 <details>
 <summary>
-Hint #1 - Breakdown of each step
+Hint 
 </summary>
 
-- Create a `test()` function that asserts the creation of a comment
-- Use `dhtSync` to await the propergation of the entry around the network
-- Create another `assert()` for testing the zome function `get_original_comment`
-- Retrieve all comments by their post hash
-- Create another `assert()` for checking if the retrieved comments contains the one we created
+```ts
+test('create and read Comment', async () => {
+  await runScenario(async (scenario) => {
+    // Construct proper paths for your app.
+    const testAppPath = process.cwd() + '/../workdir/testing-and-validation.happ'
 
+    // Set up the app to be installed
+    const appSource = { appBundleSource: { path: testAppPath } }
+
+    // Add 2 players with the test app to the Scenario. The returned players
+    // can be destructured.
+    const [alice, bob] = await scenario.addPlayersWithApps([
+      appSource,
+      appSource,
+    ])
+
+    // Shortcut peer discovery through gossip and register all agents in every
+    // conductor of the scenario.
+    await scenario.shareAllAgents()
+
+
+    const sample = await sampleComment(alice.cells[0])
+    // Alice creates a Comment
+    const record: Record = await createComment(alice.cells[0], sample);
+    assert.ok(record);
+
+    // Wait for the created entry to be propagated to the other node.
+    await dhtSync([alice, bob], alice.cells[0].cell_id[0])
+
+    // Bob gets the created Comment
+    // Bob gets the Posts for the new Comment
+    let linksToPosts: Link[] = await bob.cells[0].callZome({
+      zome_name: "blog",
+      fn_name: "get_comments_for_post",
+      payload: sample.post_hash,
+    });
+    assert.equal(linksToPosts.length, 1);
+    assert.deepEqual(linksToPosts[0].target, record.signed_action.hashed.hash);
+  })
+})
+```
 </details>
+
 
 #### 4. Create a test for checking if Agents can update comments on the DHT
 
@@ -150,13 +188,15 @@ The assertions in this test should include
 - Updating of a comment
 - Retreval of the latest update of a comment
 
+No hint for this one, you can use the post tests as an example or check the sample-solution branch if you get stuck
+
 #### 5. Create a test for checking if Agents can delete comments on the DHT
 
 The assertions in this test should include
 
 - Creation of a comment
 - Deletion of a comment
-- Retreval of all comments does not return the deleted comment
+- Retrieval of comments for post does not return the deleted comment
 
 ## Only allowing creation of comments under a maximum charactor limit
 
@@ -172,6 +212,52 @@ The assertions of this test should include:
 As we haven't written the validation rule yet, the test should be failing on the second assert.
 
 The file `comment.test.ts` might be getting a bit large, so feel free to create a new `comment-validation.test.ts`
+
+<details>
+<summary>
+Hint
+</summary>
+test('create comment >= max length', async () => {
+  await runScenario(async (scenario) => {
+    // Construct proper paths for your app.
+    const testAppPath = process.cwd() + '/../workdir/testing-and-validation.happ'
+
+    // Set up the app to be installed
+    const appSource = { appBundleSource: { path: testAppPath } }
+
+    // Add 2 players with the test app to the Scenario. The returned players
+    // can be destructured.
+    const [alice, bob] = await scenario.addPlayersWithApps([
+      appSource,
+      appSource,
+    ])
+
+    // Shortcut peer discovery through gossip and register all agents in every
+    // conductor of the scenario.
+    await scenario.shareAllAgents()
+
+    // Alice creates a Comment
+    // Create a post for the comment with a content of < 15 characters
+    let record: Record = await createComment(alice.cells[0], {
+      content: 'Short comment',
+      post_hash: (await createPost(alice.cells[0])).signed_action.hashed.hash,
+      author: alice.cells[0].cell_id[1],
+    })
+    assert.ok(record)
+
+    // Create a new post for the comment with a content of >= 15 characters
+    // Alice attempts to create a Comment
+    // Expect createComment to throw an error due to validation failure
+    await expect(async () => {
+      await createComment(alice.cells[0], {
+        content: 'Very very long comment',
+        post_hash: (await createPost(alice.cells[0])).signed_action.hashed.hash,
+        author: alice.cells[0].cell_id[1],
+      })
+    }).rejects.toThrow('Source chain error')
+  })
+})
+</details>
 
 #### 2. Navigate to `dnas/blog/zomes/integrity/blog/src/comment.rs`
 
@@ -189,38 +275,21 @@ Validation rules may seem like they are complicated, but under the hood, they ar
 Hint
 </summary>
 
-Modify your validation function to look like this
+Add the following to the end of your `validate_create_comment`  function
 
 ```rust
-pub fn validate_create_comment(
-    _action: EntryCreationAction,
-    comment: Comment
-) -> ExternResult<ValidateCallbackResult> {
-    match comment.content.chars().count() < 15 {
-        true => {
-            let record = must_get_valid_record(comment.post_hash.clone())?;
-            let _post: crate::Post = record
-                .entry()
-                .to_app_option()
-                .map_err(|e| wasm_error!(e))?
-                .ok_or(
-                    wasm_error!(
-                        WasmErrorInner::Guest(
-                            String::from("Dependant action must be accompanied by an entry")
-                        )
-                    )
-                )?;
-            Ok(ValidateCallbackResult::Valid)
-        }
-        false =>
-            Ok(
-                ValidateCallbackResult::Invalid(
-                    "Validation Error: Comment is >= 15 charactors!".to_string()
-                )
-            ),
-    }
+match comment.content.chars().count() < 15 {
+    true => Ok(ValidateCallbackResult::Valid),
+    false => 
+        Ok(
+            ValidateCallbackResult::Invalid(
+                "Validation Error: Comment is >= 15 charactors!".to_string()
+            )
+        ),
 }
 ```
+
+Notice that you would need a similar check in the validate_update_comment to fully enforce the rule
 
 </details>
 
@@ -232,7 +301,7 @@ pub fn validate_create_comment(
 
 The assertions of this test should include:
 
-- A check if an agent can update there own comment
+- A check if an agent can update their own comment
 - A check if an agent cannot update another agents comment
 
 #### 2. Create a validation rule for only allowing agents to update there own comments
@@ -268,7 +337,7 @@ pub fn validate_update_comment(
 
 </details>
 
-## Only allow a user to comment 3 times per 24 hours
+## STRETCH: Only allow a user to comment 3 times per hour
 
 #### 1. Write a test that creates a comment
 
@@ -276,6 +345,8 @@ The assertions of this test should include:
 
 - A check if an agent can create a comment
 - A check if an agent cannot create more than three comments during the test
+
+Tryorama doesn't have great time manipulation but you can use the [pause](https://github.com/holochain/tryorama/blob/main/docs/tryorama.pause.md) function 
 
 #### 2. Create a validation rule for only allowing agents to update there own comments
 
