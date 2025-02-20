@@ -13,6 +13,14 @@ pub fn validate_create_comment(
     _action: EntryCreationAction,
     comment: Comment,
 ) -> ExternResult<ValidateCallbackResult> {
+    let record = must_get_valid_record(comment.post_hash.clone())?;
+    let _post: crate::Post = record
+        .entry()
+        .to_app_option()
+        .map_err(|e| wasm_error!(e))?
+        .ok_or(wasm_error!(WasmErrorInner::Guest(String::from(
+            "Dependant action must be accompanied by an entry"
+        ))))?;
     // TODO: add the appropriate validation rules
     Ok(ValidateCallbackResult::Valid)
 }

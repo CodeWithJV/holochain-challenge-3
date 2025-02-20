@@ -42,10 +42,11 @@ To run a specific test or group of tests, you can specify the file name, or fold
 
 Eg: `npm test barebones` will run a simple test to check vitest is installed ok - it should be green
 
+Tip: if you want to filter on test name you can run
+`npm test -- -- -t delete` which will only run tests which have the "delete" in the description.
+
 #### 2. Run a specific file of your choosing
 
-Tip: if you want to filter on file name you can run
-`npm test -- -- -t delete` which will only run tests which have the "delete" in the description.
 
 #### 3. Navigate to `tests/src/blog/practice/barebones.test.ts`
 
@@ -61,7 +62,7 @@ On your terminal, you will see a helpful message detailing that our test failed
 
 #### 5. Re-comment the failing assert inside of the barebones test, and navigate to `all-posts.test.ts` and have a read through the file
 
-Here we introduce a more complex test that utilizes Tryorama - Holochains toolkit for running tests.
+Here we introduce a more complex test that utilizes [Tryorama](https://github.com/holochain/tryorama/blob/main/docs/tryorama.md) - Holochains toolkit for running tests.
 
 Try understand the different parts going on inside the file
 
@@ -70,11 +71,11 @@ Try understand the different parts going on inside the file
 
 ## Testing CRUD zomes calls
 
-Similar to how the tests are written inside `post.test.ts`, we are going to create scripts to test the Create, Read, Update, and Delete functionality of our comment entry type.
+We are going to create tests for the Create, Read, Update, and Delete functionality of our comment entry type. They will be similar to the existing ones for posts, so ou can use `post.test.ts` as a refernce.
 
 #### 1. Read through through the file inside of `common.ts`
 
-These functions will be used multiple times throughout our tests. It will be helpful to understand how they work.
+These functions will be used multiple times throughout our tests. It is be helpful to understand how they work.
 
 #### 2. Navigate to `comment.test.ts` and create a test and run a test for checking if Agents can create comments on the DHT
 
@@ -85,7 +86,7 @@ These functions will be used multiple times throughout our tests. It will be hel
 - Make a call to `createComment`
 - Use `assert.ok(record)` to validate the whether a record was returned (the test succeded) or a record was not returned (the test failed)
 
-Try do it without the hint! If you're struggling, you can also refer to `post.test.ts` to see the implementation of a similar test.
+Try do it without the hint! 
 
 You can run `npm test comment` to execute your new code
 
@@ -127,9 +128,8 @@ test('create Comment', async () => {
 
 This test is a bit more complex. There will be multiple `assert` functions for testing each of these functions:
 
-- The creation of a comment (To read comments from the DHT, we also need to create them inside the same scenario)
-- Retrieval of a post by its action hash
-- Retreval of comments by there corresponding post
+- Create a comment
+- Retreval of comments by the corresponding post
 
 <details>
 <summary>
@@ -217,6 +217,7 @@ The file `comment.test.ts` might be getting a bit large, so feel free to create 
 <summary>
 Hint
 </summary>
+```ts
 test('create comment >= max length', async () => {
   await runScenario(async (scenario) => {
     // Construct proper paths for your app.
@@ -257,6 +258,7 @@ test('create comment >= max length', async () => {
     }).rejects.toThrow('Source chain error')
   })
 })
+```
 </details>
 
 #### 2. Navigate to `dnas/blog/zomes/integrity/blog/src/comment.rs`
