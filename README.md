@@ -313,27 +313,18 @@ The assertions of this test should include:
 Hint
 </summary>
 
-`record.action().author()` retrieves the public key of the author of the action. The reason we compare against it instead of `Comment.author`, is because we can't trust the value of `Comment.author`, -it could've been modified by the client.
+`record.action().author()` retrieves the public key of the author of the action. The reason we compare against it instead of `Comment.author`, is because we can't trust the value of `Comment.author` as it can be set arbitrarily.
 
 ```rust
-pub fn validate_update_comment(
-    _action: Update,
-    _comment: Comment,
-    _original_action: EntryCreationAction,
-    _original_comment: Comment
-) -> ExternResult<ValidateCallbackResult> {
-    let _record = must_get_valid_record(_comment.post_hash.clone())?;
-    let author = _original_action.author().clone();
+let _record = must_get_valid_record(_comment.post_hash.clone())?;
+let author = _original_action.author().clone();
 
-    match author == _comment.author && author == _action.author {
-        true => Ok(ValidateCallbackResult::Valid),
-        false =>
-            Ok(
-                ValidateCallbackResult::Invalid(
-                    "Comment can only be edited by the original author".to_string()
-                )
-            ),
-    }
+if (author != _comment.author || author != _action.author) {
+        return Ok(
+            ValidateCallbackResult::Invalid(
+                "Comment can only be updated by the original author".to_string()
+            )
+        )
 }
 ```
 
